@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entrar — Painel da Barbearia</title>
+  <link rel="stylesheet" href="./admin.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <div class="tela-login">
+    <form class="cartao-login" id="form-login">
+      <div class="marca-login">
+        <span class="listra" aria-hidden="true"></span>
+        <span>Barbearia</span>
+      </div>
+      <p class="subtitulo">Acesse o painel de gestão</p>
+
+      <div id="area-erro"></div>
+
+      <div class="campo">
+        <label for="email">E-mail</label>
+        <input type="email" id="email" name="email" required autocomplete="username" />
+      </div>
+
+      <div class="campo">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" name="senha" required autocomplete="current-password" />
+      </div>
+
+      <button type="submit" class="botao botao-primario" id="botao-entrar">Entrar</button>
+    </form>
+  </div>
+
+  <script type="module" src="./login.js"></script>
+</body>
+</html>
