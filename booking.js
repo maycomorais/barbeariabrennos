@@ -102,7 +102,7 @@ function renderIndicadorPassos() {
 }
 
 function render() {
-  raiz.innerHTML = `${renderTopo()}<div class="conteudo-app">${renderIndicadorPassos()}<div id="passo-conteudo"></div></div>`;
+  raiz.innerHTML = `${renderTopo()}<div class="conteudo-app">${renderStepper()}${renderIndicadorPassos()}<div id="passo-conteudo"></div></div>`;
 
   const btnVoltar = document.getElementById('btn-voltar');
   if (btnVoltar) btnVoltar.addEventListener('click', voltar);
@@ -135,23 +135,24 @@ function voltar() {
 
 function renderPassoServico(container) {
   container.innerHTML = `
-    <h2>Qual serviço você quer agendar?</h2>
-    <div class="lista-opcoes mt-1">
+    <h2 style="font-family:var(--font-display);font-size:1.2rem;margin-bottom:12px;">Qual serviço você quer?</h2>
+    <div class="service-list">
       ${servicos.map((s) => `
-        <button class="opcao-selecionavel ${estado.servico?.id === s.id ? 'selecionada' : ''}" data-id="${s.id}">
-          <span>
-            <span class="titulo">${esc(s.nome)}</span>
-            <div class="subtitulo">${s.duracao_minutos} min</div>
-          </span>
-          <span class="preco">${formatPrecoFilial(s.preco, filial)}</span>
-        </button>
+        <div class="card-select" data-id="${s.id}">
+          <div class="info">
+            <div class="title">${esc(s.nome)}</div>
+            <div class="sub">${s.duracao_minutos} min</div>
+          </div>
+          <div class="price">${formatPrecoFilial(s.preco, filial)}</div>
+        </div>
       `).join('')}
     </div>
   `;
 
-  container.querySelectorAll('.opcao-selecionavel').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      estado.servico = servicos.find((s) => s.id === btn.dataset.id);
+  container.querySelectorAll('.card-select').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      estado.servico = servicos.find((s) => s.id === id);
       estado.horaSlot = null;
       avancar();
     });
@@ -164,22 +165,24 @@ function renderPassoServico(container) {
 
 function renderPassoBarbeiro(container) {
   container.innerHTML = `
-    <h2>Com qual profissional?</h2>
-    <div class="lista-opcoes mt-1">
+    <h2 style="font-family:var(--font-display);font-size:1.2rem;margin-bottom:12px;">Com qual profissional?</h2>
+    <div class="service-list">
       ${barbeiros.map((b) => `
-        <button class="opcao-selecionavel ${estado.barbeiro?.id === b.id ? 'selecionada' : ''}" data-id="${b.id}">
-          <span style="display:flex; align-items:center; gap:0.75rem;">
-            <span class="avatar-barbeiro">${b.foto_url ? `<img src="${esc(b.foto_url)}" alt="${esc(b.nome)}" />` : esc(iniciais(b.nome))}</span>
-            <span class="titulo">${esc(b.nome)}</span>
-          </span>
-        </button>
+        <div class="card-select" data-id="${b.id}">
+          <div class="info">
+            <div class="title">${esc(b.nome)}</div>
+            <div class="sub">${b.foto_url ? '⭐' : '✂️'}</div>
+          </div>
+          <div class="badge">Selecionar</div>
+        </div>
       `).join('')}
     </div>
   `;
 
-  container.querySelectorAll('.opcao-selecionavel').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      estado.barbeiro = barbeiros.find((b) => b.id === btn.dataset.id);
+  container.querySelectorAll('.card-select').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      estado.barbeiro = barbeiros.find((b) => b.id === id);
       estado.horaSlot = null;
       avancar();
     });
@@ -196,11 +199,11 @@ function iniciais(nome) {
 
 async function renderPassoDataHora(container) {
   container.innerHTML = `
-    <h2>Escolha o dia e o horário</h2>
+    <h2 style="font-family:var(--font-display);font-size:1.2rem;margin-bottom:12px;">Escolha o dia e o horário</h2>
     <div class="dias-scroll mt-1" id="dias-scroll"></div>
     <div id="area-horarios"></div>
-    <div class="barra-acao-fixa">
-      <button class="botao-app botao-app-acento" id="btn-continuar" disabled>Continuar</button>
+    <div style="margin-top:20px;">
+      <button class="btn-primary" id="btn-continuar" disabled>Continuar</button>
     </div>
   `;
 
@@ -223,9 +226,9 @@ function renderChipsDias(container) {
     const diaSemana = diaSemanaISO(dataISO);
     const [, , dia] = dataISO.split('-');
     html += `
-      <button class="chip-dia ${dataISO === estado.dataISO ? 'ativo' : ''}" data-data="${dataISO}">
-        <div class="dia-semana">${i === 0 ? (lang === 'es' ? 'Hoy' : 'Hoje') : nomesDias[diaSemana]}</div>
-        <div class="dia-numero">${dia}</div>
+      <button class="chip-dia ${dataISO === estado.dataISO ? 'active' : ''}" data-data="${dataISO}">
+        <div style="font-size:0.7rem;opacity:0.7;">${i === 0 ? (lang === 'es' ? 'Hoy' : 'Hoje') : nomesDias[diaSemana]}</div>
+        <div style="font-size:1rem;font-weight:700;">${dia}</div>
       </button>
     `;
   }
@@ -236,8 +239,8 @@ function renderChipsDias(container) {
     chip.addEventListener('click', async () => {
       estado.dataISO = chip.dataset.data;
       estado.horaSlot = null;
-      scroll.querySelectorAll('.chip-dia').forEach((c) => c.classList.remove('ativo'));
-      chip.classList.add('ativo');
+      scroll.querySelectorAll('.chip-dia').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
       document.getElementById('btn-continuar').disabled = true;
       await renderHorariosDoDia(container);
     });
@@ -287,14 +290,14 @@ async function renderHorariosDoDia(container) {
   }
 
   area.innerHTML = `<div class="grade-horarios mt-1">${slots.map((s) => `
-    <button class="slot-horario ${estado.horaSlot === s ? 'selecionado' : ''}" data-hora="${s}">${s}</button>
+    <button class="slot-horario ${estado.horaSlot === s ? 'selected' : ''}" data-hora="${s}">${s}</button>
   `).join('')}</div>`;
 
   area.querySelectorAll('.slot-horario').forEach((btn) => {
     btn.addEventListener('click', () => {
       estado.horaSlot = btn.dataset.hora;
-      area.querySelectorAll('.slot-horario').forEach((b) => b.classList.remove('selecionado'));
-      btn.classList.add('selecionado');
+      area.querySelectorAll('.slot-horario').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
       document.getElementById('btn-continuar').disabled = false;
     });
   });
@@ -349,32 +352,29 @@ function renderPassoCliente(container) {
 
   container.innerHTML = `
     <h2>Seus dados</h2>
-    <p class="silencioso mt-1">Só pedimos nome e telefone — sem necessidade de criar conta.</p>
-
-    <div class="campo-app mt-2">
-      <label for="campo-nome">Nome</label>
-      <input type="text" id="campo-nome" value="${esc(estado.nome)}" placeholder="Como podemos te chamar?" autocomplete="name" />
+    <div class="field">
+      <label>Nome completo</label>
+      <input type="text" id="campo-nome" placeholder="Como podemos te chamar?" />
     </div>
-
-    <div class="campo-app">
-      <label for="campo-telefone">WhatsApp / Telefone</label>
-      <div class="campo-telefone">
-        <select id="campo-ddi">${opcoesDDI}</select>
-        <input type="tel" id="campo-telefone" value="${esc(estado.telefone)}" placeholder="981234567" autocomplete="tel-national" inputmode="numeric" />
+    <div class="field">
+      <label>WhatsApp</label>
+      <div style="display:flex;gap:8px">
+        <select id="campo-ddi" style="flex:0 0 100px;">${opcoesDDI}</select>
+        <input type="tel" id="campo-telefone" placeholder="981234567" style="flex:1" />
       </div>
     </div>
-
-    <div id="erro-cliente" class="mensagem-erro oculto"></div>
-
-    <div class="barra-acao-fixa">
-      <button class="botao-app botao-app-acento" id="btn-continuar">Continuar</button>
+    <div class="field">
+      <label>Data de nascimento (opcional)</label>
+      <input type="date" id="campo-nascimento" />
     </div>
+    <button class="btn-primary" id="btn-continuar">Continuar</button>
   `;
 
   document.getElementById('btn-continuar').addEventListener('click', () => {
     const nome = document.getElementById('campo-nome').value.trim();
     const ddi = document.getElementById('campo-ddi').value;
     const telefone = document.getElementById('campo-telefone').value.trim().replace(/\D/g, '');
+    const nascimento = document.getElementById('campo-nascimento').value || null;
     const erroEl = document.getElementById('erro-cliente');
 
     if (!nome) {
@@ -391,6 +391,7 @@ function renderPassoCliente(container) {
     estado.nome = nome;
     estado.ddi = ddi;
     estado.telefone = telefone;
+    estado.nascimento = nascimento;
     avancar();
   });
 }
@@ -405,22 +406,25 @@ function renderPassoConfirmacao(container) {
 
   container.innerHTML = `
     <h2>Confira e confirme</h2>
-    <div class="cartao-app mt-1">
-      <div class="resumo-linha"><span class="rotulo">Unidade</span><span class="valor">${esc(filial.nome)}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Serviço</span><span class="valor">${esc(estado.servico.nome)}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Profissional</span><span class="valor">${esc(estado.barbeiro.nome)}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Data</span><span class="valor">${dataFormatada}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Horário</span><span class="valor">${estado.horaSlot}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Valor</span><span class="valor">${formatPrecoFilial(estado.servico.preco, filial)}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Cliente</span><span class="valor">${esc(estado.nome)}</span></div>
-      <div class="resumo-linha"><span class="rotulo">Telefone</span><span class="valor">${esc(telefoneCompleto)}</span></div>
+    <div class="resumo-card">
+      ${[
+        ['Unidade', filial.nome],
+        ['Serviço', estado.servico.nome],
+        ['Profissional', estado.barbeiro.nome],
+        ['Data', dataFormatada],
+        ['Horário', estado.horaSlot],
+        ['Valor', formatPrecoFilial(estado.servico.preco, filial)],
+        ['Cliente', estado.nome],
+        ['Telefone', telefoneCompleto],
+      ].map(([label, value]) => `
+        <div class="resumo-linha">
+          <span class="rotulo">${label}</span>
+          <span class="valor">${esc(value)}</span>
+        </div>
+      `).join('')}
     </div>
-
     <div id="erro-confirmacao" class="mensagem-erro oculto"></div>
-
-    <div class="barra-acao-fixa">
-      <button class="botao-app botao-app-acento" id="btn-confirmar">Confirmar agendamento</button>
-    </div>
+    <button class="btn-primary" id="btn-confirmar">Confirmar agendamento</button>
   `;
 
   document.getElementById('btn-confirmar').addEventListener('click', confirmarAgendamento);
@@ -436,20 +440,18 @@ async function confirmarAgendamento() {
   const inicioUTC = zonedTimeToUtc(estado.dataISO, estado.horaSlot, filial.timezone);
 
   try {
-    const { data, error } = await supabase.functions.invoke('criar-agendamento-publico', {
-      body: {
-        filial_id: filial.id,
-        servico_id: estado.servico.id,
-        barbeiro_id: estado.barbeiro.id,
-        inicio: inicioUTC.toISOString(),
-        nome: estado.nome,
-        telefone: `${estado.ddi}${estado.telefone}`,
-      },
-    });
+    // ── Chamada direta à RPC (sem Edge Function) ──
+    const agendamentoId = unwrap(await supabase.rpc('fn_criar_agendamento', {
+      p_filial_id: filial.id,
+      p_servico_id: estado.servico.id,
+      p_barbeiro_id: estado.barbeiro.id,
+      p_inicio: inicioUTC.toISOString(),
+      p_nome: estado.nome,
+      p_telefone: `${estado.ddi}${estado.telefone}`,
+      p_data_nascimento: estado.nascimento || null,
+    }));
 
-    if (error) throw error;
-    if (data?.error) throw new Error(data.error);
-
+    console.log('✅ Agendamento criado com ID:', agendamentoId);
     renderSucesso();
   } catch (e) {
     const mensagem = e.message || 'Não foi possível concluir o agendamento.';
@@ -466,18 +468,54 @@ async function confirmarAgendamento() {
 
 function renderSucesso() {
   const dataFormatada = formatarDataResumo(estado.dataISO, filial);
+  const telefoneFilial = filial.telefone ? filial.telefone.replace(/\D/g, '') : null;
+
+  // Mensagem para a barbearia (será usada no WhatsApp)
+  const mensagemWhats = `📅 *Novo agendamento via App!*\n\n` +
+    `👤 Cliente: ${estado.nome}\n` +
+    `📱 Telefone: ${estado.ddi}${estado.telefone}\n` +
+    `✂️ Serviço: ${estado.servico.nome}\n` +
+    `💈 Profissional: ${estado.barbeiro.nome}\n` +
+    `📆 Data: ${dataFormatada}\n` +
+    `⏰ Horário: ${estado.horaSlot}\n` +
+    `📍 Filial: ${filial.nome}\n` +
+    (estado.nascimento ? `🎂 Aniversário: ${estado.nascimento}\n` : '') +
+    `\n🔗 Para confirmar, acesse o painel administrativo.`;
 
   raiz.innerHTML = `
-    ${renderTopoSemVoltar()}
-    <div class="conteudo-app">
-      <div class="tela-sucesso">
-        <div class="icone-sucesso">✓</div>
-        <h2>Agendamento confirmado!</h2>
-        <p class="silencioso mt-1">${esc(estado.servico.nome)} com ${esc(estado.barbeiro.nome)}</p>
-        <p class="silencioso">${dataFormatada} às ${estado.horaSlot}</p>
-        <div class="mt-2">
-          <button class="botao-app botao-app-secundario" id="btn-voltar-menu">Voltar ao início</button>
-        </div>
+    <div class="topo-app" style="border-bottom: none; padding-bottom: 8px;">
+      <span class="listra" style="background: var(--accent-gold);"></span>
+      <div>
+        <div class="marca">Agendar</div>
+        <div class="filial-atual">${esc(filial.nome)}</div>
+      </div>
+    </div>
+    <div class="conteudo-app" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding-top: 20px;">
+      <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--accent-gold); display: flex; align-items: center; justify-content: center; font-size: 40px; color: #0B0B0B; margin-bottom: 20px; box-shadow: 0 8px 30px rgba(200, 146, 58, 0.3);">
+        ✓
+      </div>
+      <h2 style="font-family: var(--font-display); font-size: 1.6rem; margin-bottom: 4px; text-align: center;">Agendamento confirmado!</h2>
+      <p style="color: var(--text-secondary); text-align: center; margin-bottom: 20px;">Seu horário foi reservado com sucesso.</p>
+
+      <div class="resumo-card" style="width: 100%; max-width: 400px; margin: 0 auto 20px;">
+        <div class="resumo-linha"><span class="rotulo">Serviço</span><span class="valor">${esc(estado.servico.nome)}</span></div>
+        <div class="resumo-linha"><span class="rotulo">Profissional</span><span class="valor">${esc(estado.barbeiro.nome)}</span></div>
+        <div class="resumo-linha"><span class="rotulo">Data</span><span class="valor">${dataFormatada}</span></div>
+        <div class="resumo-linha"><span class="rotulo">Horário</span><span class="valor">${estado.horaSlot}</span></div>
+        <div class="resumo-linha"><span class="rotulo">Valor</span><span class="valor">${formatPrecoFilial(estado.servico.preco, filial)}</span></div>
+        <div class="resumo-linha" style="border-bottom: none; padding-bottom: 0;"><span class="rotulo">Cliente</span><span class="valor">${esc(estado.nome)}</span></div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 400px;">
+        ${telefoneFilial ? `
+          <a href="https://wa.me/${telefoneFilial}?text=${encodeURIComponent(mensagemWhats)}" 
+             target="_blank" 
+             class="btn-primary" 
+             style="text-decoration: none; text-align: center; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <i class="fab fa-whatsapp"></i> Avisar barbearia via WhatsApp
+          </a>
+        ` : ''}
+        <button class="btn-secondary" id="btn-voltar-menu" style="width: 100%;">Voltar ao início</button>
       </div>
     </div>
   `;
@@ -502,4 +540,18 @@ function formatarDataResumo(dataISO, filial) {
   const [ano, mes, dia] = dataISO.split('-').map(Number);
   const d = new Date(ano, mes - 1, dia);
   return new Intl.DateTimeFormat(lang, { weekday: 'long', day: '2-digit', month: 'long' }).format(d);
+}
+
+function renderStepper() {
+  const steps = ['Serviço', 'Profissional', 'Data/Hora', 'Dados', 'Confirmar'];
+  return `
+    <div class="stepper">
+      ${steps.map((label, i) => `
+        <div class="step-item ${i < passoAtual ? 'completed' : i === passoAtual ? 'active' : ''}">
+          <div class="step-circle">${i < passoAtual ? '✓' : i + 1}</div>
+          <div class="step-label">${label}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }

@@ -26,6 +26,8 @@ export const STRINGS = {
     nav_master: 'Empresas',
     nav_sair: 'Sair',
     cargo_admin_master: 'Admin Master',
+    'nav_minhas_financas': 'Minhas Finanças',
+
 
     // Dashboard
     dash_titulo: 'Visão geral',
@@ -49,10 +51,7 @@ export const STRINGS = {
     campo_quantidade_sessoes: 'Quantidade de sessões',
     campo_validade_dias: 'Validade (dias)',
     campo_servico_vinculado: 'Serviço',
-    campo_foto: {
-      'pt': 'Foto do produto',
-      'es': 'Foto del producto',
-    },
+    campo_foto: 'Foto do produto', 
     item_tipo_servico: 'Serviço',
     item_tipo_produto: 'Produto',
     acao_adicionar_item: '+ Adicionar item',
@@ -126,10 +125,10 @@ export const STRINGS = {
     estoque_data: 'Data',
     estoque_responsavel: 'Responsável',
     estoque_baixo_badge: 'Baixo',
-    estoque_quantidade_inicial: {
-      'pt': 'Quantidade inicial',
-      'es': 'Cantidad inicial'
-    },
+    estoque_quantidade_inicial: 'Quantidade inicial',
+
+      // Em pt:
+    'app.em_breve': 'Em breve',
 
     // PDV
     pdv_titulo: 'PDV',
@@ -252,6 +251,26 @@ export const STRINGS = {
     master_entrar_como: 'Entrar como',
     master_visualizando_como: 'Você está visualizando como',
     master_sair_visualizacao: 'Sair da visualização',
+
+    // Em pt:
+    'app.agendar': 'Agendar',
+    'app.loja': 'Loja',
+    'app.perfil': 'Perfil',
+    'app.trocar_filial': 'Trocar unidade',
+    'app.escolher_filial': 'Escolher filial',
+    'app.selecionar': 'Selecionar',
+    'app.selecionar_unidade': 'Selecione onde você quer agendar ou ver os produtos.',
+    'app.voltar': 'Voltar',
+
+    // Em es:
+    'app.agendar': 'Agendar',
+    'app.loja': 'Tienda',
+    'app.perfil': 'Perfil',
+    'app.trocar_filial': 'Cambiar sucursal',
+    'app.escolher_filial': 'Elegir sucursal',
+    'app.selecionar': 'Seleccionar',
+    'app.selecionar_unidade': 'Seleccione dónde desea agendar o ver los productos.',
+    'app.voltar': 'Volver',
   },
 
   es: {
@@ -275,6 +294,7 @@ export const STRINGS = {
     nav_master: 'Empresas',
     nav_sair: 'Salir',
     cargo_admin_master: 'Admin Master',
+    'nav_minhas_financas': 'Mis Finanzas',
 
     // Dashboard
     dash_titulo: 'Resumen',
@@ -323,6 +343,7 @@ export const STRINGS = {
     campo_moeda_secundaria: 'Moneda secundaria',
     campo_taxa_cambio: 'Tipo de cambio (1 unidad de la principal = X de la secundaria)',
     campo_cargo: 'Rol',
+    campo_foto: 'Foto del producto', 
     campo_comissao_servico: 'Comisión sobre servicios (%)',
     campo_comissao_produto: 'Comisión sobre productos (%)',
     campo_duracao: 'Duración (minutos)',
@@ -371,6 +392,7 @@ export const STRINGS = {
     estoque_data: 'Fecha',
     estoque_responsavel: 'Responsable',
     estoque_baixo_badge: 'Bajo',
+    estoque_quantidade_inicial: 'Cantidad inicial',
 
     // PDV
     pdv_titulo: 'Punto de venta',
@@ -493,8 +515,22 @@ export const STRINGS = {
     master_entrar_como: 'Entrar como',
     master_visualizando_como: 'Estás viendo como',
     master_sair_visualizacao: 'Salir de la vista',
+
+    'app.agendar': 'Agendar',
+    'app.loja': 'Tienda',
+    'app.perfil': 'Perfil',
+    'app.trocar_filial': 'Cambiar sucursal',
+    'app.escolher_filial': 'Elegir sucursal',
+    'app.selecionar': 'Seleccionar',
+    'app.selecionar_unidade': 'Seleccione dónde desea agendar o ver los productos.',
+    'app.voltar': 'Volver',
+
+    // Em es:
+    'app.em_breve': 'Próximamente',
   },
 };
+
+
 
 export function t(key, lang = 'pt') {
   return STRINGS[lang]?.[key] ?? STRINGS.pt[key] ?? key;

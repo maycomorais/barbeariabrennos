@@ -95,6 +95,7 @@ function renderTabela(filtro) {
         ${e.ativo
           ? `<button class="botao botao-perigo btn-bloquear" data-id="${e.id}">${t('master_acao_bloquear', lang)}</button>`
           : `<button class="botao botao-acento btn-desbloquear" data-id="${e.id}">${t('master_acao_desbloquear', lang)}</button>`}
+          <button class="botao botao-perigo btn-excluir" data-id="${e.id}" data-nome="${esc(e.nome)}" style="background:#c0392b; color: #fff">🗑️ Excluir</button>
       </td>
     </tr>
   `).join('');
@@ -112,6 +113,12 @@ function renderTabela(filtro) {
   tabelaEl.querySelectorAll('.btn-desbloquear').forEach((btn) => {
     btn.addEventListener('click', () => desbloquearEmpresa(lista.find((e) => e.id === btn.dataset.id)));
   });
+  tabelaEl.querySelectorAll('.btn-excluir').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const empresa = lista.find((e) => e.id === btn.dataset.id);
+      if (empresa) excluirEmpresa(empresa);
+    });
+  });
   tabelaEl.querySelectorAll('.btn-convidar').forEach((btn) => {
     btn.addEventListener('click', () => abrirFormConvidarProprietario(lista.find((e) => e.id === btn.dataset.id)));
   });
@@ -124,6 +131,45 @@ function renderTabela(filtro) {
       await iniciarImpersonation(btn.dataset.id);
     });
   });
+}
+
+// =====================================================================
+// EXCLUIR EMPRESA PERMANENTEMENTE (admin_master only)
+// =====================================================================
+
+async function excluirEmpresa(empresa) {
+  // 1. Confirmação textual (dupla segurança)
+  if (!confirm(`⚠️ ATENÇÃO: Você está prestes a EXCLUIR PERMANENTEMENTE a empresa "${empresa.nome}" e TODOS os seus dados (filiais, equipe, serviços, produtos, vendas, agendamentos, etc.).\n\nEsta ação é IRREVERSÍVEL.\n\nDigite "EXCLUIR" para confirmar.`)) {
+    return;
+  }
+  const confirmacao = prompt(`Digite EXCLUIR para confirmar a exclusão de "${empresa.nome}":`);
+  if (confirmacao !== 'EXCLUIR') {
+    alert('❌ Exclusão cancelada.');
+    return;
+  }
+
+  try {
+    // 2. Tenta excluir diretamente (se as FKs tiverem ON DELETE CASCADE)
+    const { error } = await supabase.rpc('excluir_empresa_cascata', { p_empresa_id: empresa.id });
+
+    if (error) {
+      // Se houver erro de chave estrangeira, orienta o usuário
+      if (error.code === '23503') {
+        alert(`❌ Não foi possível excluir: existem registros filhos (filiais, perfis, etc.) vinculados à empresa "${empresa.nome}".\n\nPara excluir, primeiro remova manualmente os dados filhos ou execute o script SQL de exclusão em cascata fornecido no console.`);
+        console.error('Erro de FK ao excluir empresa:', error);
+        return;
+      }
+      throw error;
+    }
+
+    alert(`✅ Empresa "${empresa.nome}" excluída com sucesso!`);
+    // 3. Recarrega a lista
+    await carregarEmpresas();
+    renderTabela(raiz.querySelector('#busca-empresa')?.value || '');
+  } catch (e) {
+    alert(`❌ Erro ao excluir empresa: ${e.message}`);
+    console.error(e);
+  }
 }
 
 // =====================================================================

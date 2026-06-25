@@ -22,11 +22,11 @@ import { t } from './i18n.js';
 import { formatTime, formatDateLong, horaMinutoNaFilial } from './formatters.js';
 import { STATUS_AGENDAMENTO_LABELS, STATUS_AGENDAMENTO_CORES, diasSemana } from './constants.js';
 
-const HORA_INICIO = 8;
-const HORA_FIM = 20;
+let HORA_INICIO = 8;
+let HORA_FIM = 23;
 const SLOT_MINUTOS = 30;
 const SLOT_ALTURA_PX = 32;
-const TOTAL_SLOTS = ((HORA_FIM - HORA_INICIO) * 60) / SLOT_MINUTOS;
+let TOTAL_SLOTS = ((HORA_FIM - HORA_INICIO) * 60) / SLOT_MINUTOS;
 
 
 let sessao, lang, filial, raiz;
@@ -35,6 +35,7 @@ let dataReferencia = new Date();
 let barbeiroSemanaId = null;
 let barbeiros = [];
 let servicos = [];
+let modoBloqueioAtivo = false;
 
 export async function init(root, sessaoAtual, ctx) {
   raiz = root;
@@ -54,8 +55,33 @@ export async function init(root, sessaoAtual, ctx) {
 
   barbeiroSemanaId = sessao.perfil.cargo === 'barbeiro' ? sessao.perfil.id : barbeiros[0]?.id || null;
 
+  // Carrega horários para o dia atual
+  const horario = await buscarHorarioFilial(new Date());
+  HORA_INICIO = horario.abre;
+  HORA_FIM = horario.fecha;
+  TOTAL_SLOTS = ((HORA_FIM - HORA_INICIO) * 60) / SLOT_MINUTOS;
+
   renderShell(raiz);
   await renderGrade();
+}
+
+// =====================================================================
+// BUSCA HORÁRIO DA FILIAL (ASYNC)
+// =====================================================================
+
+async function buscarHorarioFilial(dia) {
+  const diaSemana = dia.getDay(); // 0=domingo..6=sábado
+  const { data } = await supabase
+    .from('horarios_funcionamento')
+    .select('abre, fecha')
+    .eq('filial_id', filial.id)
+    .eq('dia_semana', diaSemana)
+    .maybeSingle();
+
+  if (!data) return { abre: 8, fecha: 20 }; // fallback
+  const abre = parseInt(data.abre.split(':')[0]);
+  const fecha = parseInt(data.fecha.split(':')[0]);
+  return { abre, fecha };
 }
 
 // =====================================================================
@@ -73,7 +99,7 @@ function renderShell(conteudo) {
         <button class="botao-icone" id="btn-anterior" aria-label="Anterior">‹</button>
         <span id="rotulo-data"></span>
         <button class="botao-icone" id="btn-proximo" aria-label="Próximo">›</button>
-        <button class="botao botao-secundario" id="btn-hoje">Hoje</button>
+        <button class="botao botao-secundario" id="btn-hoje" style="padding:0.3rem 0.8rem;font-size:0.8rem;">${t('agenda_hoje', lang) || 'Hoje'}</button>
       </div>
 
       <div class="flex-entre">
@@ -84,12 +110,14 @@ function renderShell(conteudo) {
         <select id="select-barbeiro-semana" class="oculto"></select>
         <button class="botao botao-secundario" id="btn-bloquear">${t('agenda_bloquear_horario', lang)}</button>
         <button class="botao botao-acento" id="btn-novo">+ ${t('agenda_novo_agendamento', lang)}</button>
+        <button class="botao botao-secundario" id="btn-modo-bloqueio">✏️ Modo Bloqueio</button>
       </div>
     </div>
 
     <div id="grade-container"></div>
   `;
 
+  // ---- Eventos ----
   raiz.querySelector('#btn-anterior').addEventListener('click', () => navegar(-1));
   raiz.querySelector('#btn-proximo').addEventListener('click', () => navegar(1));
   raiz.querySelector('#btn-hoje').addEventListener('click', () => { dataReferencia = new Date(); renderGrade(); });
@@ -99,18 +127,25 @@ function renderShell(conteudo) {
       raiz.querySelectorAll('#tabs-visualizacao button').forEach((b) => b.classList.remove('ativo'));
       btn.classList.add('ativo');
       modo = btn.dataset.modo;
-      raiz.querySelector('#select-barbeiro-semana').classList.toggle('oculto', modo !== 'semana');
+      const isBarbeiro = sessao.perfil.cargo === 'barbeiro';
+      const select = raiz.querySelector('#select-barbeiro-semana');
+      select.classList.toggle('oculto', modo !== 'semana' || isBarbeiro);
       renderGrade();
     });
   });
 
   const selectBarbeiro = raiz.querySelector('#select-barbeiro-semana');
-  selectBarbeiro.innerHTML = barbeiros.map((b) => `<option value="${b.id}">${esc(b.nome)}</option>`).join('');
-  if (barbeiroSemanaId) selectBarbeiro.value = barbeiroSemanaId;
-  selectBarbeiro.addEventListener('change', () => {
-    barbeiroSemanaId = selectBarbeiro.value;
-    renderGrade();
-  });
+  const isBarbeiro = sessao.perfil.cargo === 'barbeiro';
+  if (isBarbeiro) {
+    selectBarbeiro.style.display = 'none';
+  } else {
+    selectBarbeiro.innerHTML = barbeiros.map((b) => `<option value="${b.id}">${esc(b.nome)}</option>`).join('');
+    if (barbeiroSemanaId) selectBarbeiro.value = barbeiroSemanaId;
+    selectBarbeiro.addEventListener('change', () => {
+      barbeiroSemanaId = selectBarbeiro.value;
+      renderGrade();
+    });
+  }
 
   raiz.querySelector('#btn-bloquear').addEventListener('click', () => {
     const inicio = new Date(dataReferencia);
@@ -122,6 +157,21 @@ function renderShell(conteudo) {
     const inicio = new Date(dataReferencia);
     inicio.setHours(HORA_INICIO, 0, 0, 0);
     abrirModalAgendamento({ barbeiroId: modo === 'semana' ? barbeiroSemanaId : (barbeiros[0]?.id || null), inicio });
+  });
+
+  // ---- Modo Bloqueio ----
+  const btnModoBloqueio = document.getElementById('btn-modo-bloqueio');
+  btnModoBloqueio.addEventListener('click', () => {
+    modoBloqueioAtivo = !modoBloqueioAtivo;
+    if (modoBloqueioAtivo) {
+      btnModoBloqueio.style.background = '#A8503C';
+      btnModoBloqueio.style.color = '#fff';
+      btnModoBloqueio.textContent = '🔴 Modo Bloqueio (Ativo)';
+    } else {
+      btnModoBloqueio.style.background = '';
+      btnModoBloqueio.style.color = '';
+      btnModoBloqueio.textContent = '✏️ Modo Bloqueio';
+    }
   });
 }
 
@@ -142,10 +192,28 @@ async function renderGrade() {
   const container = raiz.querySelector('#grade-container');
   container.innerHTML = `<div class="tabela-vazia">Carregando…</div>`;
 
+  // Busca horários para a data atual
+  const horario = await buscarHorarioFilial(dataReferencia);
+  HORA_INICIO = horario.abre;
+  HORA_FIM = horario.fecha;
+  TOTAL_SLOTS = ((HORA_FIM - HORA_INICIO) * 60) / SLOT_MINUTOS;
+
   if (barbeiros.length === 0) {
     container.innerHTML = `<div class="tabela-vazia">Nenhum profissional cadastrado nesta filial. Cadastre em Configurações → Equipe.</div>`;
     raiz.querySelector('#rotulo-data').textContent = '';
     return;
+  }
+
+  // --- FILTRO: barbeiro vê apenas sua própria coluna ---
+  let barbeirosExibidos = barbeiros;
+  const isBarbeiro = sessao.perfil.cargo === 'barbeiro';
+  if (isBarbeiro) {
+    const meuId = sessao.perfil.id;
+    barbeirosExibidos = barbeiros.filter(b => b.id === meuId);
+    // Se por algum motivo não encontrar, usa o primeiro (fallback)
+    if (barbeirosExibidos.length === 0 && barbeiros.length > 0) {
+      barbeirosExibidos = [barbeiros[0]];
+    }
   }
 
   if (modo === 'dia') {
@@ -154,19 +222,23 @@ async function renderGrade() {
     const fim = addDias(inicio, 1);
     const [agendamentos, bloqueios] = await Promise.all([buscarAgendamentos(inicio, fim), buscarBloqueios(inicio, fim)]);
 
-    let html = abrirGrade(barbeiros.map((b) => b.nome));
+    let html = abrirGrade(barbeirosExibidos.map((b) => b.nome));
     html += colunaHorarios();
-    barbeiros.forEach((b) => {
+
+    barbeirosExibidos.forEach((b) => {
       const eventos = [
         ...agendamentos.filter((a) => a.barbeiro_id === b.id).map((a) => ({ ...a, tipo: 'agendamento' })),
         ...bloqueios.filter((bl) => bl.barbeiro_id === b.id || bl.barbeiro_id === null).map((bl) => ({ ...bl, tipo: 'bloqueio' })),
       ];
       html += coluna({ atributo: 'data-barbeiro', valor: b.id, eventos });
     });
+
     html += `</div>`;
     container.innerHTML = html;
     ligarEventos(container, { resolverContexto: (coluna) => ({ barbeiroId: coluna.dataset.barbeiro, dia: dataReferencia }) });
   } else {
+    // Modo semana: já usa barbeiroSemanaId para filtrar eventos, mas mantemos a grade com dias
+    // (Para barbeiros, a semana já mostra apenas os dias, não barbeiros, então não precisa mudar)
     const ini = inicioDaSemana(dataReferencia);
     const fimSem = addDias(ini, 7);
     const nomesDias = diasSemana(lang);
@@ -175,12 +247,15 @@ async function renderGrade() {
     raiz.querySelector('#rotulo-data').textContent = `${dataCurta(ini)} – ${dataCurta(addDias(ini, 6))}`;
 
     const [agendamentos, bloqueios] = await Promise.all([buscarAgendamentos(ini, fimSem), buscarBloqueios(ini, fimSem)]);
-    const agAlvo = agendamentos.filter((a) => a.barbeiro_id === barbeiroSemanaId);
-    const blAlvo = bloqueios.filter((b) => b.barbeiro_id === barbeiroSemanaId || b.barbeiro_id === null);
+    // Para semana, se for barbeiro, usa o próprio ID; senão, usa o selecionado
+    const idAlvo = isBarbeiro ? sessao.perfil.id : barbeiroSemanaId;
+    const agAlvo = agendamentos.filter((a) => a.barbeiro_id === idAlvo);
+    const blAlvo = bloqueios.filter((b) => b.barbeiro_id === idAlvo || b.barbeiro_id === null);
 
     const cabecalhos = dias.map((d) => `${nomesDias[d.getDay()].slice(0, 3)} ${dataCurta(d)}`);
     let html = abrirGrade(cabecalhos);
     html += colunaHorarios();
+
     dias.forEach((dia) => {
       const isoDia = dataISOLocal(dia);
       const eventos = [
@@ -189,9 +264,11 @@ async function renderGrade() {
       ];
       html += coluna({ atributo: 'data-dia', valor: isoDia, eventos });
     });
+
     html += `</div>`;
     container.innerHTML = html;
-    ligarEventos(container, { resolverContexto: (coluna) => ({ barbeiroId: barbeiroSemanaId, dia: parseDataLocal(coluna.dataset.dia) }) });
+    // Resolver contexto para a semana: barbeiroId é o alvo, dia é a data do dia
+    ligarEventos(container, { resolverContexto: (coluna) => ({ barbeiroId: idAlvo, dia: parseDataLocal(coluna.dataset.dia) }) });
   }
 }
 
@@ -285,7 +362,14 @@ function ligarEventos(container, { resolverContexto }) {
       const minutos = Number(slot.dataset.minutos);
       const inicio = new Date(dia);
       inicio.setHours(Math.floor(minutos / 60), minutos % 60, 0, 0);
-      abrirModalAgendamento({ barbeiroId, inicio });
+
+      if (modoBloqueioAtivo) {
+        // Abrir modal de bloqueio
+        abrirModalBloqueio({ barbeiroId, inicio });
+      } else {
+        // Abrir modal de agendamento (como antes)
+        abrirModalAgendamento({ barbeiroId, inicio });
+      }
     });
   });
 
@@ -460,76 +544,293 @@ async function abrirModalEditarAgendamento(id) {
 }
 
 // =====================================================================
-// MODAL: BLOQUEIO DE HORÁRIO
+// MODAL: BLOQUEIO DE HORÁRIO (VERSÃO FINAL)
 // =====================================================================
 
-function abrirModalBloqueio({ barbeiroId, inicio }) {
-  const fim = new Date(inicio.getTime() + 30 * 60000);
+function abrirModalBloqueio({ barbeiroId, inicio, data = null, fim = null, motivo = '', editarId = null }) {
+  const isBarbeiro = sessao.perfil.cargo === 'barbeiro';
 
-  const overlay = abrirModal(t('agenda_bloquear_horario', lang), `
-    <form id="form-bloqueio">
-      ${campoSelect({
-        id: 'barbeiro', label: t('agenda_barbeiro', lang), valor: barbeiroId || '',
-        opcoes: [{ valor: '', texto: 'Toda a filial (feriado)' }, ...barbeiros.map((b) => ({ valor: b.id, texto: b.nome }))],
-      })}
-      <div class="linha-formulario">
-        ${campoTexto({ id: 'inicio', label: t('agenda_inicio', lang), tipo: 'datetime-local', valor: dataParaInputLocal(inicio), obrigatorio: true })}
-        ${campoTexto({ id: 'fim', label: 'Fim', tipo: 'datetime-local', valor: dataParaInputLocal(fim), obrigatorio: true })}
+  // Opções do select – se for barbeiro, mostra apenas ele mesmo (desabilitado)
+  const profissionalOptions = isBarbeiro
+    ? `<option value="${sessao.perfil.id}" selected>${esc(sessao.perfil.nome)}</option>`
+    : `<option value="">Toda a filial</option>
+       ${barbeiros.map(b => `<option value="${b.id}" ${b.id === barbeiroId ? 'selected' : ''}>${esc(b.nome)}</option>`).join('')}`;
+
+  const overlay = abrirModal(
+    editarId ? '✏️ Editar Bloqueio' : '🔒 Novo Bloqueio',
+    `
+    <form id="form-bloqueio" style="padding:4px 0;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="campo" style="margin-bottom:0;">
+          <label for="bloq-profissional">${t('agenda_barbeiro', lang)}</label>
+          <select id="bloq-profissional" class="form-control" style="width:100%;" ${isBarbeiro ? 'disabled' : ''}>
+            ${profissionalOptions}
+          </select>
+          ${isBarbeiro ? `<input type="hidden" id="bloq-profissional-hidden" value="${sessao.perfil.id}" />` : ''}
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+          <label for="bloq-motivo">Motivo</label>
+          <input type="text" id="bloq-motivo" value="${esc(motivo)}" placeholder="Ex: Almoço, Reunião" class="form-control" style="width:100%;" />
+        </div>
       </div>
-      ${campoTextarea({ id: 'motivo', label: t('agenda_motivo_bloqueio', lang) })}
+
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:12px;">
+        <div class="campo" style="margin-bottom:0;">
+          <label for="bloq-data">Data</label>
+          <input type="date" id="bloq-data" value="${data ? data.toISOString().split('T')[0] : inicio?.toISOString().split('T')[0] || ''}" class="form-control" style="width:100%;" />
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+          <label for="bloq-hora-inicio">Início</label>
+          <input type="time" id="bloq-hora-inicio" value="${inicio ? String(inicio.getHours()).padStart(2,'0') + ':' + String(inicio.getMinutes()).padStart(2,'0') : '12:00'}" class="form-control" style="width:100%;" step="900" />
+        </div>
+        <div class="campo" style="margin-bottom:0;">
+          <label for="bloq-duracao">Duração (min)</label>
+          <input type="number" id="bloq-duracao" value="30" min="15" step="15" class="form-control" style="width:100%;" />
+        </div>
+      </div>
+
+      <!-- Repetição -->
+      <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; padding:8px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line);">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+          <input type="checkbox" id="bloq-repetir-diario" /> Repetir diariamente
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+          <input type="checkbox" id="bloq-repetir-semanal" /> Repetir semanalmente
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+          <input type="number" id="bloq-repeticoes" value="4" min="1" max="52" style="width:60px;" /> semanas
+        </label>
+      </div>
+
+      <!-- Dias da semana (para repetição semanal) -->
+      <div id="bloq-opcoes-dias" style="display:none; background:var(--bg-card); padding:10px 14px; border-radius:8px; margin-bottom:12px;">
+        <div style="font-weight:600; font-size:0.85rem; margin-bottom:6px;">Dias da semana:</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          ${['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map((dia, idx) => `
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; font-size:0.9rem;">
+              <input type="checkbox" class="bloq-dia-semana" value="${idx}" ${idx === new Date().getDay() ? 'checked' : ''} /> ${dia}
+            </label>
+          `).join('')}
+        </div>
+        <div style="margin-top:6px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.85rem;">
+            <input type="checkbox" id="bloq-aplicar-todos-dias" /> Aplicar a todos os dias da semana
+          </label>
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div id="bloq-preview" style="display:none; background:#eafaf1; padding:10px 14px; border-radius:8px; margin-bottom:12px; font-size:0.9rem; border-left:4px solid #27ae60;">
+        <strong>Pré-visualização:</strong> <span id="bloq-preview-text">Serão criados X bloqueios</span>
+      </div>
+
       <div id="erro-form" class="mensagem-erro oculto"></div>
       <div class="acoes-formulario">
-        <button type="submit" class="botao botao-primario">${t('acao_salvar', lang)}</button>
+        <button type="submit" class="botao botao-primario">${editarId ? 'Atualizar' : 'Salvar'}</button>
+        ${editarId ? `<button type="button" class="botao botao-perigo" id="btn-excluir-bloqueio">🗑️ Excluir</button>` : ''}
         <button type="button" class="botao botao-secundario" data-fechar-modal>${t('acao_cancelar', lang)}</button>
       </div>
     </form>
-  `);
+    `,
+    { wide: true }
+  );
 
+  if (!overlay) return;
+
+  // ---- Lógica de repetição ----
+  const checkboxDiario = overlay.querySelector('#bloq-repetir-diario');
+  const checkboxSemanal = overlay.querySelector('#bloq-repetir-semanal');
+  const opcoesDias = overlay.querySelector('#bloq-opcoes-dias');
+  const checkboxesDias = overlay.querySelectorAll('.bloq-dia-semana');
+  const btnTodosDias = overlay.querySelector('#bloq-aplicar-todos-dias');
+
+  function toggleRepeticao() {
+    const semanal = checkboxSemanal.checked;
+    opcoesDias.style.display = semanal ? 'block' : 'none';
+    if (checkboxDiario.checked) {
+      checkboxesDias.forEach(cb => cb.checked = true);
+    }
+    atualizarPreview();
+  }
+
+  checkboxDiario.addEventListener('change', toggleRepeticao);
+  checkboxSemanal.addEventListener('change', toggleRepeticao);
+
+  btnTodosDias.addEventListener('change', () => {
+    if (btnTodosDias.checked) {
+      checkboxesDias.forEach(cb => cb.checked = true);
+    }
+    atualizarPreview();
+  });
+
+  checkboxesDias.forEach(cb => cb.addEventListener('change', atualizarPreview));
+
+  // ---- Preview ----
+  function atualizarPreview() {
+    const data = overlay.querySelector('#bloq-data').value;
+    const hora = overlay.querySelector('#bloq-hora-inicio').value;
+    const duracao = parseInt(overlay.querySelector('#bloq-duracao').value) || 30;
+    const diario = checkboxDiario.checked;
+    const semanal = checkboxSemanal.checked;
+    const diasSelecionados = [...checkboxesDias].filter(cb => cb.checked).map(cb => parseInt(cb.value));
+    const repeticoes = parseInt(overlay.querySelector('#bloq-repeticoes').value) || 1;
+
+    let qtd = 1;
+    if (diario) qtd = 7;
+    else if (semanal && diasSelecionados.length > 0) qtd = diasSelecionados.length * repeticoes;
+
+    const preview = overlay.querySelector('#bloq-preview');
+    const previewText = overlay.querySelector('#bloq-preview-text');
+    if (qtd > 1 && data && hora) {
+      preview.style.display = 'block';
+      previewText.textContent = `Serão criados ${qtd} bloqueios (${duracao} min cada) para ${diasSelecionados.length > 0 ? 'os dias selecionados' : 'este dia'}.`;
+    } else {
+      preview.style.display = 'none';
+    }
+  }
+
+  overlay.querySelector('#bloq-data').addEventListener('change', atualizarPreview);
+  overlay.querySelector('#bloq-hora-inicio').addEventListener('change', atualizarPreview);
+  overlay.querySelector('#bloq-duracao').addEventListener('input', atualizarPreview);
+  overlay.querySelector('#bloq-repeticoes').addEventListener('input', atualizarPreview);
+  atualizarPreview();
+
+  // ---- Submit ----
   const form = overlay.querySelector('#form-bloqueio');
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const erroEl = form.querySelector('#erro-form');
-    try {
-      const inicioDate = new Date(form.querySelector('#inicio').value);
-      const fimDate = new Date(form.querySelector('#fim').value);
-      if (fimDate <= inicioDate) throw new Error('O fim deve ser depois do início.');
+    erroEl.classList.add('oculto');
 
-      unwrap(await supabase.from('bloqueios_agenda').insert({
-        empresa_id: sessao.perfil.empresa_id,
-        filial_id: filial.id,
-        barbeiro_id: form.querySelector('#barbeiro').value || null,
-        inicio: inicioDate.toISOString(),
-        fim: fimDate.toISOString(),
-        motivo: valorTexto(form, 'motivo'),
-      }));
+    // Captura o profissional (se barbeiro, força o próprio ID)
+    let profissional;
+    if (isBarbeiro) {
+      profissional = sessao.perfil.id;
+    } else {
+      profissional = overlay.querySelector('#bloq-profissional').value;
+    }
+
+    const dataStr = overlay.querySelector('#bloq-data').value;
+    const horaStr = overlay.querySelector('#bloq-hora-inicio').value;
+    const duracao = parseInt(overlay.querySelector('#bloq-duracao').value) || 30;
+    const motivo = overlay.querySelector('#bloq-motivo').value.trim() || 'Bloqueio';
+    const diario = checkboxDiario.checked;
+    const semanal = checkboxSemanal.checked;
+    const diasSelecionados = [...checkboxesDias].filter(cb => cb.checked).map(cb => parseInt(cb.value));
+    const repeticoes = parseInt(overlay.querySelector('#bloq-repeticoes').value) || 1;
+
+    if (!dataStr || !horaStr) {
+      erroEl.textContent = 'Selecione data e hora.';
+      erroEl.classList.remove('oculto');
+      return;
+    }
+
+    try {
+      const dataBase = new Date(dataStr + 'T' + horaStr + ':00');
+      if (isNaN(dataBase.getTime())) throw new Error('Data/hora inválida.');
+
+      const datasParaCriar = [];
+
+      if (diario) {
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(dataBase);
+          d.setDate(d.getDate() + i);
+          datasParaCriar.push(d);
+        }
+      } else if (semanal && diasSelecionados.length > 0) {
+        const diaBase = dataBase.getDay();
+        for (let rep = 0; rep < repeticoes; rep++) {
+          for (const diaSemana of diasSelecionados) {
+            let diff = diaSemana - diaBase;
+            const d = new Date(dataBase);
+            d.setDate(d.getDate() + diff + (rep * 7));
+            const hoje = new Date();
+            hoje.setHours(0,0,0,0);
+            if (d >= hoje) datasParaCriar.push(d);
+          }
+        }
+      } else {
+        datasParaCriar.push(dataBase);
+      }
+
+      if (datasParaCriar.length === 0) {
+        erroEl.textContent = 'Nenhuma data válida para criar bloqueios.';
+        erroEl.classList.remove('oculto');
+        return;
+      }
+
+      const fimDate = new Date(dataBase);
+      fimDate.setMinutes(fimDate.getMinutes() + duracao);
+
+      const inserir = datasParaCriar.map(d => {
+        const inicio = new Date(d);
+        const fim = new Date(d);
+        fim.setMinutes(fim.getMinutes() + duracao);
+        return {
+          empresa_id: sessao.perfil.empresa_id,
+          filial_id: filial.id,
+          barbeiro_id: profissional || null,
+          inicio: inicio.toISOString(),
+          fim: fim.toISOString(),
+          motivo: motivo,
+        };
+      });
+
+      const { error } = await supabase.from('bloqueios_agenda').insert(inserir);
+      if (error) throw error;
 
       fecharModal(overlay);
       await renderGrade();
     } catch (e) {
-      erroEl.textContent = mensagemAmigavel(e.message);
+      erroEl.textContent = e.message;
       erroEl.classList.remove('oculto');
     }
   });
+
+  // ---- Botão Excluir (edição) ----
+  const btnExcluir = overlay.querySelector('#btn-excluir-bloqueio');
+  if (btnExcluir) {
+    btnExcluir.addEventListener('click', async () => {
+      if (!confirm('Tem certeza que deseja excluir este bloqueio?')) return;
+      try {
+        const { error } = await supabase
+          .from('bloqueios_agenda')
+          .delete()
+          .eq('id', editarId);
+        if (error) throw error;
+        fecharModal(overlay);
+        await renderGrade();
+      } catch (e) {
+        alert('Erro ao excluir: ' + e.message);
+      }
+    });
+  }
 }
 
+// =====================================================================
+// ABRIR BLOQUEIO EXISTENTE
+// =====================================================================
+
 async function abrirModalBloqueioExistente(id) {
-  const bloqueio = unwrap(await supabase.from('bloqueios_agenda').select('id, inicio, fim, motivo, perfis(nome)').eq('id', id).single());
+  const { data: bloqueio } = await supabase
+    .from('bloqueios_agenda')
+    .select('*')
+    .eq('id', id)
+    .single();
 
-  const overlay = abrirModal('Bloqueio', `
-    <p><strong>${t('agenda_inicio', lang)}:</strong> ${formatDateLong(bloqueio.inicio, filial)}, ${formatTime(bloqueio.inicio, filial)}–${formatTime(bloqueio.fim, filial)}</p>
-    <p><strong>${t('agenda_barbeiro', lang)}:</strong> ${esc(bloqueio.perfis?.nome || 'Toda a filial')}</p>
-    ${bloqueio.motivo ? `<p><strong>${t('agenda_motivo_bloqueio', lang)}:</strong> ${esc(bloqueio.motivo)}</p>` : ''}
-    <div class="acoes-formulario">
-      <button type="button" class="botao botao-perigo" id="btn-excluir-bloqueio">${t('acao_excluir', lang)}</button>
-      <button type="button" class="botao botao-secundario" data-fechar-modal>${t('acao_voltar', lang)}</button>
-    </div>
-  `);
+  if (!bloqueio) return;
 
-  overlay.querySelector('#btn-excluir-bloqueio').addEventListener('click', async () => {
-    if (!confirm(t('confirmacao_excluir', lang))) return;
-    unwrap(await supabase.from('bloqueios_agenda').delete().eq('id', id));
-    fecharModal(overlay);
-    await renderGrade();
+  const inicio = new Date(bloqueio.inicio);
+  const fim = new Date(bloqueio.fim);
+  const duracao = (fim - inicio) / 60000;
+
+  abrirModalBloqueio({
+    barbeiroId: bloqueio.barbeiro_id,
+    inicio,
+    data: inicio,
+    fim,
+    motivo: bloqueio.motivo || '',
+    editarId: id
   });
 }
 

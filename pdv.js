@@ -640,6 +640,7 @@ function abrirFormNovoCliente() {
   container.innerHTML = `
     ${campoTexto({ id: 'novo-cliente-nome', label: t('campo_nome', lang) })}
     ${campoTexto({ id: 'novo-cliente-telefone', label: 'Telefone' })}
+    ${campoTexto({ id: 'novo-cliente-nascimento', label: 'Data de nascimento', tipo: 'date' })}
     <div id="erro-novo-cliente" class="mensagem-erro oculto"></div>
     <button type="button" class="botao botao-primario" id="btn-salvar-novo-cliente">${t('acao_salvar', lang)}</button>
   `;
@@ -647,6 +648,7 @@ function abrirFormNovoCliente() {
   raiz.querySelector('#btn-salvar-novo-cliente').addEventListener('click', async () => {
     const nome = raiz.querySelector('#novo-cliente-nome').value.trim();
     const telefone = raiz.querySelector('#novo-cliente-telefone').value.trim() || null;
+    const nascimento = raiz.querySelector('#novo-cliente-nascimento').value || null;
     const erroEl = raiz.querySelector('#erro-novo-cliente');
 
     if (!nome) {
@@ -656,7 +658,12 @@ function abrirFormNovoCliente() {
     }
 
     try {
-      const novo = unwrap(await supabase.from('clientes').insert({ empresa_id: sessao.perfil.empresa_id, nome, telefone }).select().single());
+      const novo = unwrap(await supabase.from('clientes').insert({
+        empresa_id: sessao.perfil.empresa_id,
+        nome,
+        telefone,
+        data_nascimento: nascimento,
+      }).select().single());
       await selecionarCliente(novo);
     } catch (e) {
       erroEl.textContent = e.message;
@@ -687,6 +694,19 @@ async function finalizarVenda() {
     erroCheckout = 'Venda fiado requer um cliente selecionado.';
     renderCarrinho();
     return;
+  }
+  if (vendaPacote) {
+    // Verifica se o pacote ainda está ativo
+    const { data: pacoteAtivo } = await supabase
+      .from('pacotes_servico')
+      .select('ativo')
+      .eq('id', vendaPacote.pacote_servico_id)
+      .single();
+    if (!pacoteAtivo?.ativo) {
+      erroCheckout = 'Este pacote não está mais ativo.';
+      renderCarrinho();
+      return;
+    }
   }
 
   // 2. Calcular total

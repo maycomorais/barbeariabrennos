@@ -25,9 +25,6 @@ export async function init(root, sessaoAtual, ctx) {
   lang = ctx.lang;
   clienteAtual = null;
 
-  // maybeSingle() retorna { data: null, error: null } quando a empresa
-  // ainda não configurou fidelidade — unwrap() devolve null nesse caso,
-  // sem lançar (lança só quando error está presente).
   fidelidadeConfig = unwrap(
     await supabase.from('fidelidade_config').select('*').eq('empresa_id', sessao.perfil.empresa_id).maybeSingle()
   );
@@ -76,11 +73,48 @@ function renderBusca() {
     <div id="ficha-cliente-crm" class="mt-1"></div>
   `;
 
+  // Carregar todos os clientes inicialmente
+  carregarTodosClientes();
+
   const input = p.querySelector('#busca-cliente-crm');
   let timeoutId;
   input.addEventListener('input', () => {
     clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => buscarClientes(input.value.trim()), 300);
+    const termo = input.value.trim();
+    if (termo.length < 2) {
+      carregarTodosClientes();
+    } else {
+      timeoutId = setTimeout(() => buscarClientes(termo), 300);
+    }
+  });
+}
+
+async function carregarTodosClientes() {
+  const resultadosEl = painel().querySelector('#resultados-busca-crm');
+  const fichaEl = painel().querySelector('#ficha-cliente-crm');
+  fichaEl.innerHTML = '';
+
+  const clientes = unwrap(
+    await supabase
+      .from('clientes')
+      .select('id, nome, telefone')
+      .eq('empresa_id', sessao.perfil.empresa_id)
+      .order('nome')
+      .limit(50)
+  );
+
+  if (clientes.length === 0) {
+    resultadosEl.innerHTML = `<div class="silencioso">${t('cli_sem_resultado', lang)}</div>`;
+    return;
+  }
+
+  resultadosEl.innerHTML = `
+    <div class="pdv-resultados-cliente">
+      ${clientes.map((c) => `<button type="button" data-id="${c.id}">${esc(c.nome)}${c.telefone ? ` — ${esc(c.telefone)}` : ''}</button>`).join('')}
+    </div>
+  `;
+  resultadosEl.querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => abrirFicha(btn.dataset.id));
   });
 }
 
@@ -182,11 +216,20 @@ function renderFicha(fichaEl, cliente, preferencias, pacotes, visitas) {
     </div>
 
     <div class="cartao mt-1">
-      <h3>${t('cli_pacotes_ativos', lang)}</h3>
-      <div class="mt-1">
+      <div class="flex-entre">
+        <h3>${t('cli_pacotes_ativos', lang)}</h3>
+        <button type="button" class="botao botao-acento" id="btn-gerenciar-pacotes">${t('cli_gerenciar_pacotes', lang)}</button>
+      </div>
+      <div class="mt-1" id="lista-pacotes-cliente">
         ${pacotes.length === 0 ? `<p class="silencioso">${t('cli_sem_pacotes', lang)}</p>` : `
           <ul style="padding-left:1.1rem; display:flex; flex-direction:column; gap:0.4rem;">
-            ${pacotes.map((p) => `<li>${esc(p.pacote_nome)} — ${p.sessoes_restantes} ${t('cli_sessoes_restantes', lang)}${p.data_validade ? ` (${t('cli_validade_ate', lang)} ${formatarDataSimples(p.data_validade)})` : ''}</li>`).join('')}
+            ${pacotes.map((p) => `
+              <li>
+                <strong>${esc(p.pacote_nome)}</strong> — ${p.sessoes_restantes} ${t('cli_sessoes_restantes', lang)}
+                ${p.data_validade ? ` (${t('cli_validade_ate', lang)} ${formatarDataSimples(p.data_validade)})` : ''}
+                <button class="botao botao-perigo" data-pacote-id="${p.id}" data-acao="cancelar-pacote" style="font-size:0.7rem; padding:0.2rem 0.5rem; margin-left:0.5rem;">Cancelar</button>
+              </li>
+            `).join('')}
           </ul>
         `}
       </div>
@@ -206,6 +249,28 @@ function renderFicha(fichaEl, cliente, preferencias, pacotes, visitas) {
       </div>
     </div>
   `;
+
+  // ---- Botão cancelar pacote diretamente na lista ----
+  fichaEl.querySelectorAll('[data-acao="cancelar-pacote"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const pacoteId = btn.dataset.pacoteId;
+      if (!confirm('Deseja cancelar este pacote? As sessões restantes serão perdidas.')) return;
+      try {
+        await supabase.from('pacotes_cliente').update({ status: 'cancelado' }).eq('id', pacoteId);
+        await abrirFicha(cliente.id);
+      } catch (e) {
+        alert('Erro ao cancelar pacote: ' + e.message);
+      }
+    });
+  });
+
+  // ---- Botão "Gerenciar Pacotes" (amarelo) ----
+  const btnGerenciar = fichaEl.querySelector('#btn-gerenciar-pacotes');
+  if (btnGerenciar) {
+    btnGerenciar.addEventListener('click', () => {
+      abrirModalGerenciarPacotes(cliente.id, fichaEl);
+    });
+  }
 
   fichaEl.querySelector('#btn-fechar-ficha').addEventListener('click', () => {
     clienteAtual = null;
@@ -230,6 +295,57 @@ function renderFicha(fichaEl, cliente, preferencias, pacotes, visitas) {
     });
   }
 }
+
+// =====================================================================
+// MODAL GERENCIAR PACOTES
+// =====================================================================
+
+async function abrirModalGerenciarPacotes(clienteId, fichaEl) {
+  const pacotes = unwrap(
+    await supabase
+      .from('pacotes_cliente')
+      .select('*, pacotes_servico(nome)')
+      .eq('cliente_id', clienteId)
+      .order('created_at', { ascending: false })
+  );
+
+  const overlay = abrirModal('Gerenciar Pacotes', `
+    <div class="tabela-wrap">
+      ${pacotes.length === 0 ? `<div class="tabela-vazia">Nenhum pacote encontrado para este cliente.</div>` : `
+      <table>
+        <thead><tr><th>Pacote</th><th>Sessões restantes</th><th>Status</th><th>Validade</th><th>Ações</th></tr></thead>
+        <tbody>
+          ${pacotes.map(p => `
+            <tr>
+              <td>${esc(p.pacotes_servico?.nome || '—')}</td>
+              <td>${p.sessoes_restantes}</td>
+              <td><span class="badge ${p.status === 'ativo' ? 'badge-sage' : 'badge-neutro'}">${p.status}</span></td>
+              <td>${p.data_validade ? formatarDataSimples(p.data_validade) : '—'}</td>
+              <td>
+                ${p.status === 'ativo' ? `<button class="botao botao-perigo" data-id="${p.id}" data-acao="cancelar-pacote-modal">Cancelar</button>` : ''}
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+    <div class="acoes-formulario"><button type="button" class="botao botao-secundario" data-fechar-modal>Fechar</button></div>
+  `);
+
+  overlay.querySelectorAll('[data-acao="cancelar-pacote-modal"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Cancelar este pacote?')) return;
+      await supabase.from('pacotes_cliente').update({ status: 'cancelado' }).eq('id', btn.dataset.id);
+      fecharModal(overlay);
+      await abrirModalGerenciarPacotes(clienteId, fichaEl); // recarrega o modal
+      if (fichaEl) await abrirFicha(clienteId); // recarrega a ficha se disponível
+    });
+  });
+}
+
+// =====================================================================
+// PREFERÊNCIAS
+// =====================================================================
 
 function abrirFormPreferencia(clienteId, fichaEl) {
   const overlay = abrirModal(t('cli_nova_preferencia', lang), `

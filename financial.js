@@ -45,12 +45,14 @@ export async function init(root, sessaoAtual, ctx) {
     return;
   }
 
+  // UMA ÚNICA ATRIBUIÇÃO, com todas as abas (incluindo Comissões)
   raiz.innerHTML = `
     <div class="cabecalho-pagina"><h1>${t('fin_titulo', lang)}</h1></div>
     <div class="tabs" id="tabs-financeiro">
       <button data-tab="fluxo" class="ativo">${t('fin_tab_fluxo', lang)}</button>
       <button data-tab="dre">${t('fin_tab_dre', lang)}</button>
       <button data-tab="fiado">${t('fin_tab_fiado', lang)}</button>
+      <button data-tab="comissoes">Comissões por Profissional</button>
     </div>
     <div id="financeiro-conteudo"></div>
   `;
@@ -71,10 +73,207 @@ function renderAba() {
   if (abaAtual === 'fluxo') return renderFluxo();
   if (abaAtual === 'dre') return renderDre();
   if (abaAtual === 'fiado') return renderFiado();
+  if (abaAtual === 'comissoes') return renderComissoes();
 }
 
 function painel() {
   return raiz.querySelector('#financeiro-conteudo');
+}
+
+// =====================================================================
+// COMISSÕES POR PROFISSIONAL COM DETALHAMENTO
+// =====================================================================
+
+async function renderComissoes() {
+  const p = painel();
+  p.innerHTML = `<div class="tabela-vazia">Carregando…</div>`;
+
+  const { inicio, fim } = intervaloPeriodo(periodoFluxo);
+
+  // Busca lançamentos de comissão com informações da venda
+  const { data: lancamentos, error } = await supabase
+    .from('lancamentos_financeiros')
+    .select(`
+      valor,
+      perfil_id,
+      venda_id,
+      perfis(nome),
+      vendas(
+        id,
+        created_at,
+        cliente_id,
+        clientes(nome),
+        total
+      )
+    `)
+    .eq('filial_id', filial.id)
+    .eq('tipo', 'comissao')
+    .gte('data_lancamento', inicio.toISOString().slice(0, 10))
+    .lte('data_lancamento', fim.toISOString().slice(0, 10))
+    .order('data_lancamento', { ascending: false });
+
+  if (error) {
+    p.innerHTML = `<div class="mensagem-erro">Erro ao carregar comissões: ${error.message}</div>`;
+    return;
+  }
+
+  if (!lancamentos || lancamentos.length === 0) {
+    p.innerHTML = `<div class="tabela-vazia">Nenhuma comissão registrada neste período.</div>`;
+    return;
+  }
+
+  // Agrupa por perfil_id
+  const grupos = {};
+  lancamentos.forEach((l) => {
+    const id = l.perfil_id || 'sem_barbeiro';
+    if (!grupos[id]) {
+      grupos[id] = {
+        nome: l.perfis?.nome || 'Profissional não identificado',
+        total_comissao: 0,
+        qtd: 0,
+        detalhes: [],
+      };
+    }
+    grupos[id].total_comissao += Number(l.valor);
+    grupos[id].qtd += 1;
+    grupos[id].detalhes.push({
+      venda_id: l.venda_id,
+      valor: Number(l.valor),
+      data: l.vendas?.created_at || null,
+      cliente: l.vendas?.clientes?.nome || 'Cliente não identificado',
+      total_venda: l.vendas?.total || 0,
+    });
+  });
+
+  const lista = Object.values(grupos).sort((a, b) => b.total_comissao - a.total_comissao);
+  const totalGeral = lista.reduce((acc, i) => acc + i.total_comissao, 0);
+  const totalQtd = lista.reduce((acc, i) => acc + i.qtd, 0);
+
+  // Monta a tabela com botão "Detalhes"
+  const linhas = lista.map((item, idx) => `
+    <tr>
+      <td><strong>${esc(item.nome)}</strong></td>
+      <td class="preco">${item.qtd}</td>
+      <td class="preco">${formatPrecoFilial(item.total_comissao, filial)}</td>
+      <td class="coluna-acoes">
+        <button class="botao botao-secundario btn-detalhes" data-idx="${idx}">Detalhes</button>
+      </td>
+    </tr>
+  `).join('');
+
+  p.innerHTML = `
+    <div class="flex-entre mt-1">
+      <div class="tabs-inline" id="tabs-periodo-comissoes">
+        <button data-periodo="hoje" class="${periodoFluxo === 'hoje' ? 'ativo' : ''}">${t('fin_periodo_hoje', lang)}</button>
+        <button data-periodo="semana" class="${periodoFluxo === 'semana' ? 'ativo' : ''}">${t('fin_periodo_semana', lang)}</button>
+        <button data-periodo="mes" class="${periodoFluxo === 'mes' ? 'ativo' : ''}">${t('fin_periodo_mes', lang)}</button>
+      </div>
+    </div>
+
+    <div class="grade-cartoes mt-1">
+      <div class="cartao cartao-metrica">
+        <p class="rotulo">Total em Comissões</p>
+        <p class="valor">${formatPrecoFilial(totalGeral, filial)}</p>
+      </div>
+      <div class="cartao cartao-metrica">
+        <p class="rotulo">Total de Lançamentos</p>
+        <p class="valor">${totalQtd}</p>
+      </div>
+      <div class="cartao cartao-metrica">
+        <p class="rotulo">Média por Profissional</p>
+        <p class="valor">${lista.length ? formatPrecoFilial(totalGeral / lista.length, filial) : 'Gs 0'}</p>
+      </div>
+    </div>
+
+    <div class="tabela-wrap mt-1">
+      <table>
+        <thead>
+          <tr>
+            <th>${t('campo_nome', lang)}</th>
+            <th>Qtd. Comissões</th>
+            <th>Total (Gs)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${linhas}</tbody>
+        <tfoot>
+          <tr style="font-weight:700; background:var(--sage-tint);">
+            <td>TOTAL</td>
+            <td>${totalQtd}</td>
+            <td>${formatPrecoFilial(totalGeral, filial)}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  `;
+
+  // Eventos dos botões de período
+  p.querySelectorAll('#tabs-periodo-comissoes button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      periodoFluxo = btn.dataset.periodo;
+      renderComissoes();
+    });
+  });
+
+  // Eventos dos botões "Detalhes"
+  p.querySelectorAll('.btn-detalhes').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.idx);
+      const profissional = lista[idx];
+      abrirModalDetalhesComissoes(profissional);
+    });
+  });
+}
+
+// =====================================================================
+// MODAL DE DETALHES DAS COMISSÕES DE UM PROFISSIONAL
+// =====================================================================
+
+function abrirModalDetalhesComissoes(profissional) {
+  if (!profissional || !profissional.detalhes || profissional.detalhes.length === 0) return;
+
+  const overlay = abrirModal(`Comissões — ${esc(profissional.nome)}`, `
+    <div style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:8px 0; border-bottom:1px solid var(--line);">
+        <span><strong>Total de comissões:</strong> ${formatPrecoFilial(profissional.total_comissao, filial)}</span>
+        <span><strong>Quantidade:</strong> ${profissional.qtd}</span>
+      </div>
+    </div>
+    <div class="tabela-wrap" style="max-height:300px; overflow-y:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Cliente</th>
+            <th>Valor da Venda</th>
+            <th>Comissão</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${profissional.detalhes.map((d) => `
+            <tr>
+              <td>${d.data ? formatDateTime(d.data, filial) : '—'}</td>
+              <td>${esc(d.cliente)}</td>
+              <td class="preco">${formatPrecoFilial(d.total_venda, filial)}</td>
+              <td class="preco" style="font-weight:700; color:var(--brass);">${formatPrecoFilial(d.valor, filial)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700; background:var(--sage-tint);">
+            <td colspan="3">Total</td>
+            <td>${formatPrecoFilial(profissional.total_comissao, filial)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="acoes-formulario mt-1">
+      <button type="button" class="botao botao-secundario" data-fechar-modal>${t('acao_voltar', lang)}</button>
+    </div>
+  `);
+
+  // O overlay já tem o data-fechar-modal, não precisa de mais nada.
 }
 
 // =====================================================================

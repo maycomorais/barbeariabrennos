@@ -35,6 +35,7 @@ const ICONES = {
   clients: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>',
   master: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6l-8-4Z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>',
+  minhas_financas: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
 };
 
 // Rota -> { labelKey, módulo a importar, somenteGestor, somenteAdminMaster,
@@ -49,12 +50,15 @@ const ROTAS = {
   clientes:  { labelKey: 'nav_clientes',  arquivo: './clients.js',   somenteGestor: false, ocultaSeSemPerfil: true },
   config:    { labelKey: 'nav_configuracoes', arquivo: './settings.js', somenteGestor: true, ocultaSeSemPerfil: true },
   master:    { labelKey: 'nav_master', arquivo: './master.js', somenteGestor: false, somenteAdminMaster: true },
+  minhas_financas: { labelKey: 'nav_minhas_financas', arquivo: './my-financial.js', somenteGestor: false, ocultaSeSemPerfil: true },
 };
 const ROTA_PADRAO = 'dashboard';
-
 let sessao = null;
 let lang = 'pt';
-let moduloAtual = null; // { destruir? } — para módulos que precisam limpar listeners/timers
+let moduloAtual = null;
+let perfilUsuario = null; 
+let FEATURES_ATIVAS = null;
+
 
 // =====================================================================
 // IMPERSONATION (Admin Master "entrar como" uma empresa)
@@ -78,29 +82,53 @@ async function iniciar() {
   sessao = await carregarSessao();
   if (!sessao) return; // já redirecionou para login ou mostrou tela de bloqueio
 
-  // Restaura uma sessão de impersonation que sobreviveu a um F5. Só faz
-  // sentido para quem é admin master de verdade — se por algum motivo a
-  // chave estiver presente para outro tipo de usuário (sessionStorage
-  // sendo zerado entre logins diferentes na mesma aba, por exemplo),
-  // ignora silenciosamente.
+  // Define perfilUsuario
+  if (sessao && sessao.perfil) {
+    perfilUsuario = sessao.perfil.cargo;
+  } else {
+    perfilUsuario = null;
+  }
+
+  // Carrega features (opcional)
+  await _carregarFeaturesGlobais();
+  
+  // Restaura impersonation...
   if (ehAdminMaster()) {
     const empresaIdSalva = sessionStorage.getItem(CHAVE_IMPERSONATION);
     if (empresaIdSalva) {
       await carregarImpersonation(empresaIdSalva);
     }
   }
-
+  
   lang = getLangByPais(filialAtiva()?.pais);
   montarShell();
+  
+  _aplicarVisibilidadeAbas();
+  
   window.addEventListener('hashchange', rotear);
-
-  // Admin master puro (sem perfil de empresa) não tem dashboard/agenda/etc.
-  // para ver — cai direto na gestão de tenants. Não se aplica enquanto
-  // estiver impersonando uma empresa.
   if (!sessao.perfil && !impersonando && !window.location.hash) {
     window.location.hash = '#master';
   }
+  console.log('perfilUsuario:', perfilUsuario);
   rotear();
+}
+
+// =====================================================================
+// FEATURES GLOBAIS (carregadas do banco)
+// =====================================================================
+
+async function _carregarFeaturesGlobais() {
+  try {
+    const { data } = await supabase.from('configuracoes').select('features_ativas').maybeSingle();
+    if (data?.features_ativas) {
+      FEATURES_ATIVAS = data.features_ativas;
+    } else {
+      FEATURES_ATIVAS = null;
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar features:', e.message);
+    FEATURES_ATIVAS = null;
+  }
 }
 
 async function carregarSessao() {
@@ -262,21 +290,19 @@ async function carregarImpersonation(empresaId) {
 // =====================================================================
 
 function montarShell() {
-  const shell = document.getElementById('app-shell');
+ const shell = document.getElementById('app-shell');
   const filial = filialAtiva();
   const ehGestor = podeGerenciar();
   const ehMaster = ehAdminMaster();
   const temContextoDeEmpresa = !!sessao.perfil || !!impersonando;
+  const abasPermitidas = getAbasPermitidas();
 
   const itensVisiveis = Object.entries(ROTAS).filter(([rotaId, r]) => {
-    // A rota #master fica oculta enquanto o Admin Master está
-    // impersonando — "Sair da visualização" (na barra de aviso) é o
-    // único caminho de volta, para deixar claro que ele não está
-    // navegando livremente entre o painel de tenants e o de uma empresa.
     if (rotaId === 'master' && impersonando) return false;
     if (r.somenteAdminMaster && !ehMaster) return false;
     if (r.somenteGestor && !ehGestor) return false;
     if (r.ocultaSeSemPerfil && !temContextoDeEmpresa) return false;
+    if (!abasPermitidas.includes(rotaId)) return false;
     return true;
   });
 
@@ -334,6 +360,36 @@ function montarShell() {
   document.getElementById('nav-sidebar').addEventListener('click', () => sidebar.classList.remove('aberto'));
 }
 
+function getAbasPermitidas() {
+  // 🔥 Se for proprietário ou dono, retorna TODAS as abas
+  if (perfilUsuario === 'proprietario' || perfilUsuario === 'dono') {
+    return Object.keys(ROTAS);
+  }
+
+  const permissoesPadrao = {
+    barbeiro: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'minhas_financas'],
+    },
+    recepcionista: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'clientes'],
+    },
+    funcionario: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'estoque'],
+    },
+    gerente: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'estoque', 'financeiro', 'clientes', 'configuracoes'],
+    },
+  };
+
+  if (perfilUsuario === 'adminMaster') {
+    return Object.keys(ROTAS);
+  }
+
+  const cargo = perfilUsuario || 'funcionario';
+  const permissoes = FEATURES_ATIVAS?.permissoes_cargo?.[cargo] || permissoesPadrao[cargo] || { tabs: [] };
+  return permissoes.tabs || [];
+}
+
 function marcarLinkAtivo(rotaId) {
   document.querySelectorAll('#nav-sidebar a').forEach((a) => {
     a.classList.toggle('ativo', a.dataset.rota === rotaId);
@@ -379,6 +435,84 @@ async function rotear() {
     console.error(`[admin.js] Falha ao carregar módulo ${rotaFinal.arquivo}:`, e);
     content.innerHTML = `<div class="tabela-vazia">Não foi possível carregar esta seção.</div>`;
   }
+}
+
+function _aplicarVisibilidadeAbas() {
+  // Mapeamento dos IDs dos elementos do menu para as chaves internas
+  const mapa = {
+    "menu-pedidos":       "pedidos",
+    "menu-cozinha":       "cozinha",
+    "menu-pdv":           "pdv",
+    "menu-financeiro":    "financeiro",
+    "menu-inventario":    "estoque",
+    "menu-equipe":        "equipe",
+    "menu-configuracoes": "configuracoes",
+    "menu-dashboard":     "dashboard",
+    "menu-estatisticas":  "estatisticas",
+    "menu-ficha-tecnica": "ficha-tecnica",
+    "menu-crm":           "crm",
+    "menu-turnos":        "turnos",
+    "menu-produtos":      "produtos",
+    "menu-mensalistas":   "mensalistas",
+    "menu-minhas_financas":"minhas_financas",
+  };
+
+  // Se não houver perfil, não faz nada
+  if (!perfilUsuario) return;
+
+  // 🔥 REGRA DE OURO: proprietário e dono veem TODAS as abas
+  if (perfilUsuario === 'proprietario' || perfilUsuario === 'dono') {
+    Object.values(mapa).forEach(chave => {
+      const el = document.getElementById(`menu-${chave}`);
+      if (el) {
+        el.style.display = 'flex';
+        console.log(`✅ ${chave} visível para ${perfilUsuario}`);
+      } else {
+        console.warn(`⚠️ Elemento #menu-${chave} não encontrado no DOM`);
+      }
+    });
+    return; // Sai da função, não aplica outras restrições
+  }
+
+  // Admin master também vê tudo
+  if (perfilUsuario === 'adminMaster') {
+    Object.values(mapa).forEach(chave => {
+      const el = document.getElementById(`menu-${chave}`);
+      if (el) el.style.display = 'flex';
+    });
+    return;
+  }
+
+  // Para outros cargos, aplica permissões
+  const permissoesPadrao = {
+    gerente: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'estoque', 'financeiro', 'clientes', 'configuracoes'],
+    },
+    barbeiro: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'minhas_financas'],
+    },
+    recepcionista: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'clientes'],
+    },
+    funcionario: {
+      tabs: ['dashboard', 'agenda', 'pdv', 'estoque'],
+    },
+  };
+
+  let permissoes = permissoesPadrao[perfilUsuario];
+  // Se FEATURES_ATIVAS tiver permissões para este cargo, usa as do banco
+  if (FEATURES_ATIVAS?.permissoes_cargo?.[perfilUsuario]) {
+    permissoes = FEATURES_ATIVAS.permissoes_cargo[perfilUsuario];
+  }
+  const abasPermitidas = permissoes?.tabs || [];
+
+  Object.entries(mapa).forEach(([menuId, chave]) => {
+    const el = document.getElementById(menuId);
+    if (!el) return;
+    const visivel = abasPermitidas.includes(chave);
+    el.style.display = visivel ? 'flex' : 'none';
+    console.log(`${menuId} (${chave}) -> ${visivel ? '✅' : '❌'} [perfil: ${perfilUsuario}]`);
+  });
 }
 
 /**

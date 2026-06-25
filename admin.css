@@ -10,7 +10,7 @@
    barbeiro) usada apenas como indicador do item ativo no menu lateral.
    ===================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
 :root {
   /* Cores */
@@ -28,7 +28,7 @@
   --text-on-ink: #F4F6F4;
 
   /* Tipografia */
-  --font-display: 'Fraunces', serif;
+  --font-display: 'Inter', system-ui, sans-serif;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-mono: 'Space Mono', monospace;
 
@@ -1015,4 +1015,317 @@ tbody tr:hover { background: rgba(232, 239, 233, 0.5); }
   border: none;
   border-top: 1px dashed #888;
   margin: 1mm 0;
+}
+
+/* Bloqueio avançado */
+.bloqueio-slot {
+  transition: background 0.15s, border-color 0.15s;
+}
+.bloqueio-slot:hover {
+  border-color: var(--brass);
+}
+.bloqueio-slot.selecionado {
+  background: var(--brass) !important;
+  border-color: var(--brass);
+}
+
+.bloqueio-filtros {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+@media (max-width: 768px) {
+  .bloqueio-filtros {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Estilos para o modal de bloqueio */
+#bloqueio-grade .slot-bloqueio {
+  padding: 8px 4px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.15s;
+  color: var(--text);
+  text-align: center;
+}
+#bloqueio-grade .slot-bloqueio:hover {
+  border-color: var(--brass);
+  background: var(--sage-tint);
+}
+#bloqueio-grade .slot-bloqueio.selected {
+  border-color: var(--brass);
+  background: var(--brass-soft);
+  color: var(--ink);
+}
+#bloqueio-grade {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+#form-bloqueio .campo label {
+  font-weight: 600;
+  color: #2c3e50;
+}
+#bloq-opcoes-repeticao {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+}
+#bloq-preview {
+  background: #eafaf1;
+  border-left: 4px solid #27ae60;
+}
+
+/* =====================================================================
+   AGENDA — NOVA IDENTIDADE VISUAL
+   ===================================================================== */
+
+/* Barra de ferramentas */
+.agenda-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--surface);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 1rem;
+  border: 1px solid var(--line);
+}
+
+.agenda-toolbar .navegacao-data {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.agenda-toolbar .navegacao-data span {
+  min-width: 120px;
+  text-align: center;
+}
+
+.agenda-toolbar .flex-entre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 auto;
+}
+
+.agenda-toolbar .flex-entre .tabs-inline {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.agenda-toolbar .flex-entre .tabs-inline button {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.agenda-toolbar .flex-entre .tabs-inline button.ativo {
+  background: var(--ink);
+  color: var(--text-on-ink);
+  border-color: var(--ink);
+}
+
+.agenda-toolbar .flex-entre select,
+.agenda-toolbar .flex-entre .botao {
+  font-size: 0.8rem;
+  padding: 0.4rem 0.8rem;
+}
+
+/* Grade */
+.agenda-grade {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.agenda-cabecalho-coluna {
+  background: var(--sage-tint);
+  padding: 0.6rem 0.5rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.agenda-cabecalho-coluna:last-child { border-right: none; }
+
+.agenda-coluna-horarios-wrap {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.agenda-coluna-horarios {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: right;
+  padding: 0 0.5rem;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.agenda-coluna {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--surface);
+}
+
+.agenda-slot {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  min-height: 28px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.agenda-slot:hover {
+  background: var(--sage-tint);
+}
+.agenda-slot:last-child {
+  border-right: none;
+}
+
+/* Eventos */
+.agenda-evento {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  border-left: 4px solid var(--brass);
+  background: var(--brass-soft);
+  cursor: pointer;
+  z-index: 2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.agenda-evento:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 3;
+}
+.agenda-evento .horario {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  display: block;
+  opacity: 0.8;
+}
+
+.agenda-bloqueio {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--line) 0 8px,
+    var(--surface) 8px 16px
+  );
+  border-left-color: var(--clay) !important;
+}
+
+/* Responsivo */
+@media (max-width: 768px) {
+  .agenda-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  .agenda-toolbar .navegacao-data {
+    justify-content: center;
+  }
+  .agenda-toolbar .flex-entre {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .agenda-toolbar .flex-entre .tabs-inline {
+    justify-content: center;
+  }
+  .agenda-toolbar .flex-entre select,
+  .agenda-toolbar .flex-entre .botao {
+    width: 100%;
+  }
+  .agenda-grade {
+    font-size: 0.7rem;
+    overflow-x: auto;
+  }
+  .agenda-cabecalho-coluna {
+    font-size: 0.7rem;
+    padding: 0.4rem 0.3rem;
+  }
+  .agenda-coluna-horarios {
+    font-size: 0.6rem;
+  }
+  .agenda-evento {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.3rem;
+  }
+}
+
+/* Melhorias para o dashboard */
+.dash-greeting {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--brass);
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.dash-date {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.dash-rankings .ranking-card {
+  transition: box-shadow 0.2s;
+}
+.dash-rankings .ranking-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+}
+.rank-item .rank-bar-wrap {
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+  height: 6px;
+}
+.rank-item .rank-bar {
+  height: 100%;
+  background: var(--brass);
+  border-radius: 4px;
+  transition: width 0.6s ease;
+}
+.rank-item .rank-bar-purple {
+  background: #8b5cf6;
 }

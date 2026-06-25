@@ -440,3 +440,23 @@ a:hover { text-decoration: underline; }
   border-top: 1px dashed #888;
   margin: 1mm 0;
 }
+
+/* Estilos para o carrinho da loja */
+.grade-produtos .cartao-produto .btn-adicionar {
+  width: 100%;
+  padding: 0.4rem;
+  font-size: 0.85rem;
+  border-radius: var(--radius-sm);
+}
+
+#carrinho-flutuante {
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.overlay-modal-carrinho, .overlay-checkout {
+  backdrop-filter: blur(2px);
+}
